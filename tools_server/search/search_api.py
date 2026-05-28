@@ -184,35 +184,38 @@ def azure_bing_search(
     return []
 
 
-# For local wiki search (optional, requires separate setup)
-def local_wiki_search(query: str, config: Dict[str, Any]) -> str:
+# Local hybrid retrieval (Search-R1 hybrid_retrieval.py server)
+def local_retrieve(query: str, config: Dict[str, Any]) -> List[Dict]:
     """
-    Search local Wikipedia index.
-    
-    Requires a local wiki search server running at the configured URL.
-    See: https://github.com/your-wiki-search-repo
-    
+    Retrieve passages from a local corpus via the Search-R1 hybrid retrieval server.
+
+    The server (search_r1/search/hybrid_retrieval.py) performs BM25 + dense recall
+    fused with RRF and exposes a /retrieve endpoint. Request/response contract:
+        POST { "queries": [...], "topk": int, "return_scores": true }
+        ->   { "result": [ [ {"document": {...}, "score": float}, ... ], ... ] }
+
     Args:
-        query: Search query
-        config: Configuration with wiki_search_url and wiki_search_topk
-        
+        query: A single retrieval query
+        config: Configuration with hybrid_retrieval_url and hybrid_retrieval_topk
+
     Returns:
-        Search results as string
+        List of {"document": {...}, "score": float} for this query (empty on error)
     """
-    wiki_url = config.get('wiki_search_url', 'http://127.0.0.1:8000/retrieve')
-    topk = config.get('wiki_search_topk', 3)
-    
+    url = config.get('hybrid_retrieval_url', 'http://127.0.0.1:8000/retrieve')
+    topk = config.get('hybrid_retrieval_topk', 3)
+
     try:
         response = requests.post(
-            wiki_url,
-            json={"query": query, "topk": topk},
+            url,
+            json={"queries": [query], "topk": topk, "return_scores": True},
             timeout=30
         )
         response.raise_for_status()
-        return response.text
+        result = response.json().get('result', [])
+        return result[0] if result else []
     except Exception as e:
-        print(f"[Search] Local wiki search error: {e}")
-        return f"Error: Local wiki search failed - {str(e)}"
+        print(f"[Retrieve] Local hybrid retrieve error for '{query}': {e}")
+        return []
 
 
 def mock_search_results(query: str) -> List[Dict]:
@@ -248,5 +251,6 @@ def mock_search_results(query: str) -> List[Dict]:
 if __name__ == "__main__":
     # Test search
     print("Testing Serper Google search...")
-    results = serper_google_search("test query", "your_api_key_here", top_k=3)
+    # results = serper_google_search("test query", "your_api_key_here", top_k=3)
+    results = local_retrieve("test query", "your_api_key_here", top_k=3)
     print(f"Results: {results}")

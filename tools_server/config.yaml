@@ -22,8 +22,15 @@ azure_bing_search_mkt: "en-US"
 cache_dir: "./cache/tool_cache"
 cache_ttl_days: 7
 
-# Available Tools
-available_tools: ["web_search"]
+# Local Hybrid Retrieval (Search-R1 hybrid_retrieval.py server)
+# Start it with: python search_r1/search/hybrid_retrieval.py (defaults to port 8000)
+hybrid_retrieval_url: "http://127.0.0.1:8000/retrieve"
+hybrid_retrieval_topk: 3
+
+# Available Tools: add "local_retrieve" to enable hybrid local corpus retrieval
+# 冒烟测试只开 local_retrieve（serper_api_key 为空，web_search 会返回空，先去掉以免干扰）
+# 之后要 web+local 混用改成 ["web_search", "local_retrieve"]
+available_tools: ["local_retrieve"]
 
 # Code execution environment
 codeact_env_disabled: true
