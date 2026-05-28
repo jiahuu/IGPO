@@ -58,6 +58,10 @@ class GenerationConfig:
     codeact_env_disabled: bool = True
     # info_gain_type: "prob_diff" (probability difference) or "log_prob_diff" (log probability difference)
     info_gain_type: str = "prob_diff"
+    # Redundancy penalty strength (beta). 0 disables it. Each turn's IG reward is
+    # reduced by beta * P_t, where P_t is the fraction of that turn's retrieved
+    # documents already seen in earlier turns of the same rollout.
+    redundancy_beta: float = 0.0
     
 
 class LLMGenerationManager:
@@ -390,6 +394,10 @@ class LLMGenerationManager:
         info_gain_rewards = [[] for _ in range(len(messages_list))]
         gt_values = {}  # Store previous turn's value (probability or log probability, depending on info_gain_type)
 
+        # Per-rollout ordered retrieval history (one doc-id set per search turn),
+        # used to compute the redundancy penalty after the loop.
+        search_doc_ids_per_turn = [[] for _ in range(len(messages_list))]
+
         # Vectorized switch detection
         use_vectorized_gt_logprob = is_vectorized_enabled()
         
@@ -637,6 +645,14 @@ class LLMGenerationManager:
                     
             tool_call_list = self.execute_predictions(tool_call_list,len(messages_list))
             print(f"node {node_rank}, turn {step} tool_call_list {len(tool_call_list)} datas")
+            # Record this turn's retrieved doc ids per rollout (chronological order)
+            if self.config.redundancy_beta > 0:
+                for t in tool_call_list:
+                    gidx = t.get('idx')
+                    if gidx is None:
+                        continue
+                    doc_ids = t.get('retrieved_doc_ids') or []
+                    search_doc_ids_per_turn[gidx].append(set(doc_ids))
             for i in range(len(tool_call_list)):
                 if not self.codeact_env_disabled:  # code act enabled
                     messages_list[tool_call_list[i]['idx']].append(
@@ -1003,4 +1019,57 @@ class LLMGenerationManager:
 
         print(f"node {node_rank} message_string_list {len(message_string_list)}")
 
+        # ========== Redundancy penalty (StepSearch-inspired, annotation-free) ==========
+        # Subtract beta * P_t from each turn's IG BEFORE the downstream group
+        # z-normalization, so beta is auto-scaled to the IG range.
+        if self.config.redundancy_beta > 0:
+            self._apply_redundancy_penalty(info_gain_rewards, search_doc_ids_per_turn, node_rank)
+
         return message_string_list, message_tensor, info_gain_rewards
+
+    @staticmethod
+    def _compute_redundancy_penalties(doc_id_sets: List[set]) -> List[float]:
+        """P_t = |I_t ∩ H_{t-1}| / |I_t| for each search turn (chronological).
+
+        First turn (empty history) and empty retrievals yield P_t = 0.
+        """
+        penalties = []
+        history = set()
+        for ids in doc_id_sets:
+            if ids:
+                penalties.append(len(ids & history) / len(ids))
+                history |= ids
+            else:
+                penalties.append(0.0)
+        return penalties
+
+    def _apply_redundancy_penalty(self, info_gain_rewards, search_doc_ids_per_turn, node_rank):
+        """Reduce each turn's IG reward by beta * P_t and log aggregate stats."""
+        beta = self.config.redundancy_beta
+        all_penalties = []
+        unique_ratios = []
+        for i in range(len(info_gain_rewards)):
+            penalties = self._compute_redundancy_penalties(search_doc_ids_per_turn[i])
+            # IG[k] corresponds to search #k; align from the front (degenerate
+            # samples with skipped IG entries simply penalize fewer turns).
+            n = min(len(penalties), len(info_gain_rewards[i]))
+            if n != len(penalties) and len(penalties) > 0:
+                print(f"[Redundancy] node {node_rank} sample {i}: "
+                      f"penalties={len(penalties)} vs ig={len(info_gain_rewards[i])}, "
+                      f"penalizing first {n}")
+            for k in range(n):
+                info_gain_rewards[i][k] -= beta * penalties[k]
+            all_penalties.extend(penalties)
+            # Unique-doc ratio across this rollout's searches (for ablation logging)
+            seen, total = set(), 0
+            for ids in search_doc_ids_per_turn[i]:
+                seen |= ids
+                total += len(ids)
+            if total > 0:
+                unique_ratios.append(len(seen) / total)
+        if all_penalties:
+            mean_p = sum(all_penalties) / len(all_penalties)
+            mean_u = sum(unique_ratios) / len(unique_ratios) if unique_ratios else 1.0
+            print(f"[Redundancy] node {node_rank} beta={beta} "
+                  f"mean_P_t={mean_p:.4f} mean_unique_ratio={mean_u:.4f} "
+                  f"searches={len(all_penalties)}")

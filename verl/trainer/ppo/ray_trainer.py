@@ -1122,6 +1122,7 @@ class RayPPOTrainer:
             oss_endpoint=self.config.data.oss_endpoint,
             codeact_env_disabled=self.config.codeact_env_disabled,
             info_gain_type=getattr(self.config.algorithm, 'info_gain_type', 'prob_diff'),
+            redundancy_beta=getattr(self.config.algorithm, 'redundancy_beta', 0.0),
         )
 
         generation_manager = LLMGenerationManager(
