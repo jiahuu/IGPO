@@ -1,8 +1,10 @@
 
 # Core ML Framework
-torch>=2.4.0
-transformers
-accelerate
+# 注意: 必须从 PyTorch 官方索引装 cu121 版:
+#   pip install torch==2.4.0+cu121 torchvision==0.19.0+cu121 --index-url https://download.pytorch.org/whl/cu121
+torch==2.4.0
+transformers==4.46.3   # 更新版会用 torch 2.5+ 的 API,跟 torch 2.4 冲突
+accelerate             # 撞 accelerate 时再钉 1.0.1
 peft
 datasets
 safetensors
@@ -11,16 +13,16 @@ einops
 # Ray distributed computing
 ray[default]>=2.10
 
-# vLLM inference
-vllm
-triton>=3.1.0
+# vLLM inference (0.6.3 配 torch 2.4.0 / verl 0.2.x;别用更新版,会要 torch 2.11)
+vllm==0.6.3
+triton==3.0.0   # 配 torch 2.4.0;别用 3.1.0(那是 torch 2.5 的)
 
 # Data processing
 numpy
 pandas
 pyarrow>=15.0.0
 torchdata
-tensordict>=0.6.0
+tensordict==0.5.0   # 0.6+ 需要 torch>=2.5,跟 torch 2.4.0 冲突
 
 # Configuration & logging
 hydra-core

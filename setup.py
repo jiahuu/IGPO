@@ -34,13 +34,16 @@ install_requires = [
     "pybind11",
     "pylatexenc",
     "ray[default]>=2.10",
-    "tensordict==0.6.2",
+    # tensordict 0.6+ 要求 torch>=2.5,跟 torch==2.4.0 互斥。verl 0.2 配 0.5.0。
+    "tensordict==0.5.0",
     "torchdata",
-    "transformers",
+    # transformers 4.50+ 用了 torch 2.5+ 的 API,跟 torch 2.4 冲突
+    "transformers==4.46.3",
     "wandb",
     "smolagents",
-    "vllm",
-    "triton==3.1.0",
+    "vllm==0.6.3",
+    # triton 3.1.0 配 torch 2.5;torch 2.4.0 自己要 triton==3.0.0
+    "triton==3.0.0",
     "torch==2.4.0+cu121"
 ]
 
