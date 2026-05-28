@@ -50,7 +50,16 @@ class FSDPVLLMShardingManager(BaseShardingManager):
         self.module = module
         # For AsyncLLM, inference_engine and model_runner are defer intialized in vLLMAsyncRollout.load_model
         self.inference_engine = inference_engine
-        self.model_runner = inference_engine.llm_engine.model_executor.driver_worker.worker.model_runner if inference_engine else None
+        if inference_engine is not None:
+            # verl 自带的 customized SPMDGPUExecutor(vllm 0.5.4/0.6.3 wrapper)把 worker 挂在 .worker;
+            # vllm 自身新版 spmd 走 .driver_worker.worker。按属性探测,两种都兼容。
+            _me = inference_engine.llm_engine.model_executor
+            if hasattr(_me, "worker"):
+                self.model_runner = _me.worker.model_runner
+            else:
+                self.model_runner = _me.driver_worker.worker.model_runner
+        else:
+            self.model_runner = None
         self.model_config = model_config
         self.device_mesh = device_mesh
         self.offload_param = offload_param

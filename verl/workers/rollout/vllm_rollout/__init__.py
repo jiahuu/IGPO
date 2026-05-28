@@ -42,6 +42,9 @@ if package_version <= "0.6.3":
     vllm_mode = "customized"
     from .fire_vllm_rollout import FIREvLLMRollout  # noqa: F401
     from .vllm_rollout import vLLMRollout  # noqa: F401
+    # customized 模式下用不到 async,但 fsdp_workers.py 会无条件 import 这个名字。
+    # 给个 None 占位让 import 不报错;在 customized 分支里它永远不会被实例化。
+    vLLMAsyncRollout = None  # noqa: F401
 else:
     vllm_mode = "spmd"
     from .vllm_rollout_spmd import vLLMAsyncRollout, vLLMRollout  # noqa: F401

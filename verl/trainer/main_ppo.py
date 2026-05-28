@@ -21,7 +21,7 @@ import hydra
 import ray
 
 from verl.trainer.ppo.ray_trainer import RayPPOTrainer
-from verl.trainer.ppo.reward import load_train_reward_manager,load_valid_reward_manager
+from verl.trainer.ppo.reward import load_train_reward_manager, load_valid_reward_manager
 
 
 def get_custom_reward_fn(config):
